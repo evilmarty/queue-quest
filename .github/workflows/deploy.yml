@@ -3,6 +3,13 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # Publishing only matters when the built app could differ, so docs and
+    # unrelated workflows don't need to trigger a deploy.
+    paths-ignore:
+      - '**/*.md'
+      - '.github/workflows/test.yml'
+      - '.gitignore'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:
