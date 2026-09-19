@@ -2,6 +2,9 @@
 
 import math
 import random
+import shutil
+import subprocess
+import tempfile
 import wave
 from array import array
 from pathlib import Path
@@ -12,13 +15,17 @@ BEAT = 60 / TEMPO
 BARS = 20
 DURATION = BARS * 4 * BEAT
 FRAME_COUNT = int(DURATION * SAMPLE_RATE)
-OUTPUT = Path(__file__).parents[1] / "src/assets/epic-adventure.wav"
+OUTPUT = Path(__file__).parents[1] / "src/assets/epic-adventure.mp3"
 LOOP_OUTPUT = (
-    Path(__file__).parents[1] / "src/assets/epic-adventure-loop.wav"
+    Path(__file__).parents[1] / "src/assets/epic-adventure-loop.mp3"
 )
 VICTORY_OUTPUT = (
-    Path(__file__).parents[1] / "src/assets/victory-fanfare.wav"
+    Path(__file__).parents[1] / "src/assets/victory-fanfare.mp3"
 )
+
+# VBR quality for the MP3 masters. The soundtrack is synthesised at 22.05 kHz,
+# so this keeps the assets roughly 8x smaller than WAV without audible loss.
+MP3_QUALITY = "5"
 
 left = array("f", [0.0]) * FRAME_COUNT
 right = array("f", [0.0]) * FRAME_COUNT
@@ -307,6 +314,40 @@ for delay_seconds, gain, side in (
     for frame in range(delay_frames, FRAME_COUNT):
         target[frame] += source[frame - delay_frames] * gain
 
+def encode_mp3(source_wav, output):
+    ffmpeg = shutil.which("ffmpeg")
+
+    if ffmpeg is None:
+        raise SystemExit(
+            "ffmpeg is required to encode the soundtrack. "
+            "Install it with `brew install ffmpeg`."
+        )
+
+    subprocess.run(
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(source_wav),
+            "-codec:a",
+            "libmp3lame",
+            "-q:a",
+            MP3_QUALITY,
+            # Keep the authored rate so the decoder-padding trim in
+            # src/music.ts can realign playback against a known frame count.
+            "-ar",
+            str(SAMPLE_RATE),
+            "-ac",
+            "2",
+            str(output),
+        ],
+        check=True,
+    )
+
+
 def master_and_write(output, label):
     peak = max(
         max(abs(sample) for sample in left),
@@ -327,11 +368,17 @@ def master_and_write(output, label):
         pcm.append(int(max(-1, min(1, right_sample * master_gain)) * 32767))
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(output), "wb") as output_file:
-        output_file.setnchannels(2)
-        output_file.setsampwidth(2)
-        output_file.setframerate(SAMPLE_RATE)
-        output_file.writeframes(pcm.tobytes())
+
+    with tempfile.TemporaryDirectory() as work_dir:
+        staged_wav = Path(work_dir) / "master.wav"
+
+        with wave.open(str(staged_wav), "wb") as output_file:
+            output_file.setnchannels(2)
+            output_file.setsampwidth(2)
+            output_file.setframerate(SAMPLE_RATE)
+            output_file.writeframes(pcm.tobytes())
+
+        encode_mp3(staged_wav, output)
 
     print(f"Wrote {output} ({DURATION:.1f}s, {label} at 0.975 peak)")
 

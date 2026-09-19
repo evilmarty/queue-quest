@@ -363,3 +363,154 @@ describe('restarting the score for a replay', () => {
     expect(context.sources[5].loop).toBe(false)
   })
 })
+
+const SOURCE_RATE = 22_050
+const CONTEXT_RATE = 48_000
+const SOURCE_FRAMES = [980_000, 392_000, 220_500]
+
+function expectedLength(sourceFrames: number): number {
+  return Math.round((sourceFrames * CONTEXT_RATE) / SOURCE_RATE)
+}
+
+class FakeAudioBuffer {
+  readonly sampleRate = CONTEXT_RATE
+  readonly numberOfChannels: number
+  readonly length: number
+  private channels: Float32Array[]
+
+  constructor(channels: number, length: number, data?: Float32Array[]) {
+    this.numberOfChannels = channels
+    this.length = length
+    this.channels =
+      data ?? Array.from({ length: channels }, () => new Float32Array(length))
+  }
+
+  get duration(): number {
+    return this.length / this.sampleRate
+  }
+
+  getChannelData(channel: number): Float32Array {
+    return this.channels[channel]
+  }
+}
+
+// Mimics a decoder that keeps the MP3 granule delay and trailing padding, the
+// way WebKit does. Real audio is a ramp so misalignment is detectable.
+class PaddingAudioContext extends FakeAudioContext {
+  private paddedDecodes = 0
+
+  constructor(
+    private lead: number,
+    private pad: number,
+  ) {
+    super()
+  }
+
+  createBuffer(channels: number, length: number): AudioBuffer {
+    return new FakeAudioBuffer(channels, length) as unknown as AudioBuffer
+  }
+
+  async decodeAudioData(): Promise<AudioBuffer> {
+    const frames = SOURCE_FRAMES[this.paddedDecodes++] ?? SOURCE_FRAMES[0]
+    const real = expectedLength(frames)
+    const total = this.lead + real + this.pad
+    const channels = Array.from({ length: 2 }, () => {
+      const data = new Float32Array(total)
+      for (let i = 0; i < real; i += 1) {
+        data[this.lead + i] = i + 1
+      }
+      return data
+    })
+
+    return new FakeAudioBuffer(2, total, channels) as unknown as AudioBuffer
+  }
+}
+
+describe('mp3 decoder padding', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  function stub(context: FakeAudioContext): void {
+    vi.stubGlobal('AudioContext', class {
+      constructor() {
+        return context
+      }
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      }),
+    )
+  }
+
+  it('strips the granule delay and padding a decoder leaves in place', async () => {
+    const lead = Math.round((576 * CONTEXT_RATE) / SOURCE_RATE)
+    const context = new PaddingAudioContext(lead, 1811)
+    stub(context)
+
+    await new FantasySoundtrack().play()
+
+    const [intro, loop] = context.sources
+    const introBuffer = intro.buffer as unknown as FakeAudioBuffer
+    const loopBuffer = loop.buffer as unknown as FakeAudioBuffer
+
+    expect(introBuffer.length).toBe(expectedLength(SOURCE_FRAMES[0]))
+    expect(loopBuffer.length).toBe(expectedLength(SOURCE_FRAMES[1]))
+    // A ramp starting at exactly 1 proves the lead delay was removed, so the
+    // trim is aligned rather than merely the right size.
+    expect(loopBuffer.getChannelData(0)[0]).toBe(1)
+    expect(loopBuffer.getChannelData(1)[0]).toBe(1)
+    expect(loopBuffer.getChannelData(0)[loopBuffer.length - 1]).toBe(
+      loopBuffer.length,
+    )
+  })
+
+  it('schedules the loop seamlessly once padding is removed', async () => {
+    const lead = Math.round((576 * CONTEXT_RATE) / SOURCE_RATE)
+    const context = new PaddingAudioContext(lead, 1811)
+    stub(context)
+
+    await new FantasySoundtrack().play()
+
+    const introDuration = expectedLength(SOURCE_FRAMES[0]) / CONTEXT_RATE
+    expect(context.sources[1].startTime).toBeCloseTo(10.05 + introDuration, 5)
+    expect(context.sources[1].loop).toBe(true)
+  })
+
+  it('leaves sample-exact buffers untouched', async () => {
+    const context = new PaddingAudioContext(0, 0)
+    stub(context)
+
+    await new FantasySoundtrack().play()
+
+    const loopBuffer = context.sources[1].buffer as unknown as FakeAudioBuffer
+    expect(loopBuffer.length).toBe(expectedLength(SOURCE_FRAMES[1]))
+    expect(loopBuffer.getChannelData(0)[0]).toBe(1)
+  })
+
+  it('keeps buffers a decoder returned short rather than padding them', async () => {
+    const context = new PaddingAudioContext(0, 0)
+    const shortfall = 868
+    const original = context.decodeAudioData.bind(context)
+    context.decodeAudioData = async () => {
+      const buffer = (await original()) as unknown as FakeAudioBuffer
+      const length = buffer.length - shortfall
+      return new FakeAudioBuffer(2, length, [
+        buffer.getChannelData(0).subarray(0, length),
+        buffer.getChannelData(1).subarray(0, length),
+      ]) as unknown as AudioBuffer
+    }
+    stub(context)
+
+    await new FantasySoundtrack().play()
+
+    const introBuffer = context.sources[0].buffer as unknown as FakeAudioBuffer
+    expect(introBuffer.length).toBe(
+      expectedLength(SOURCE_FRAMES[0]) - shortfall,
+    )
+  })
+})

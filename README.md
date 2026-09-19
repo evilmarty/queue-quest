@@ -36,11 +36,20 @@ production deployments should use short-lived credentials issued by a trusted
 backend or edge function.
 
 The original intro, continuation loop, and victory fanfare are generated from
-source:
+source and encoded as MP3, which requires [ffmpeg](https://ffmpeg.org)
+(`brew install ffmpeg`):
 
 ```sh
 python3 scripts/generate_soundtrack.py
 ```
+
+MP3 is not a sample-exact format: encoders add a granule of decoder delay and
+trailing padding. Chromium and Firefox honour the gapless headers and discard
+both, but WebKit returns them, which would inject roughly 60ms of silence into
+every loop iteration. `src/music.ts` therefore trims each decoded buffer back
+to its authored length so the intro flows into the loop seamlessly. The frame
+counts in `src/music.ts` must stay in sync with the generator if the tempo or
+bar count changes.
 
 ## Checks
 
