@@ -1,0 +1,529 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap');
+
+:root {
+  color: #f8e7b0;
+  background: #090b20;
+  font-family: 'Silkscreen', monospace;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%) 0 0 / 8px 8px,
+    linear-gradient(315deg, rgba(255, 255, 255, 0.025) 25%, transparent 25%) 0 0 / 8px 8px,
+    linear-gradient(#18133c 0%, #101432 52%, #17243a 52%, #0a1024 100%);
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  background: url('./assets/castle-mountain.png') bottom center / cover no-repeat;
+  content: '';
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+body::after {
+  position: fixed;
+  inset: 0;
+  border: 8px solid rgba(5, 6, 18, 0.5);
+  box-shadow: inset 0 0 80px #050612;
+  content: '';
+  pointer-events: none;
+}
+
+.game-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(100% - 40px, 780px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 48px 0;
+  align-content: center;
+}
+
+.music-toggle {
+  position: absolute;
+  top: 22px;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 3px solid #c68b4a;
+  color: #f8e7b0;
+  background: #312348;
+  box-shadow:
+    3px 3px 0 #704653,
+    6px 6px 0 #050612;
+  font: inherit;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.music-toggle:hover,
+.music-toggle:focus-visible {
+  color: #ffd66b;
+  background: #432e5e;
+  outline: 3px solid #ffd66b;
+  outline-offset: 4px;
+}
+
+.music-toggle:active {
+  box-shadow:
+    1px 1px 0 #704653,
+    3px 3px 0 #050612;
+  transform: translate(3px, 3px);
+}
+
+.music-toggle[aria-pressed='false'] {
+  color: #92a7d5;
+}
+
+.music-toggle__icon {
+  color: #ffd66b;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.82rem;
+}
+
+.masthead {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0 0 18px;
+  color: #92a7d5;
+  font-size: clamp(0.58rem, 1.7vw, 0.75rem);
+  letter-spacing: 0.12em;
+  line-height: 1.7;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #050612;
+}
+
+h1 {
+  margin: 0;
+  color: #ffd66b;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(2.1rem, 7.2vw, 4.6rem);
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  line-height: 1.2;
+  text-shadow:
+    4px 0 0 #9e4f3d,
+    0 4px 0 #9e4f3d,
+    4px 4px 0 #4d2344,
+    8px 8px 0 #050612;
+}
+
+.masthead__ornament {
+  display: flex;
+  align-items: center;
+  width: min(100%, 430px);
+  margin: 27px auto 0;
+  gap: 12px;
+}
+
+.masthead__ornament::before,
+.masthead__ornament::after {
+  height: 4px;
+  flex: 1;
+  background: linear-gradient(90deg, transparent, #9e7444);
+  box-shadow: 0 4px 0 #050612;
+  content: '';
+}
+
+.masthead__ornament::after {
+  background: linear-gradient(90deg, #9e7444, transparent);
+}
+
+.masthead__ornament span {
+  width: 14px;
+  height: 14px;
+  border: 3px solid #ffd66b;
+  background: #9e4f3d;
+  box-shadow: 3px 3px 0 #050612;
+  transform: rotate(45deg);
+}
+
+.ticket {
+  position: relative;
+  border: 6px solid #37223d;
+  outline: 4px solid #c68b4a;
+  background: #d3b879;
+  box-shadow:
+    0 0 0 8px #171329,
+    12px 16px 0 #050612;
+}
+
+.ticket::before,
+.ticket::after {
+  position: absolute;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  border: 4px solid #5b3346;
+  background: #ffd66b;
+  box-shadow: 4px 4px 0 #171329;
+  content: '';
+}
+
+.ticket::before {
+  top: -11px;
+  left: -11px;
+}
+
+.ticket::after {
+  right: -11px;
+  bottom: -11px;
+}
+
+.ticket--finished {
+  outline-color: #ffe395;
+  box-shadow:
+    0 0 0 8px #3d2740,
+    0 0 32px rgba(255, 214, 107, 0.38),
+    12px 16px 0 #050612;
+}
+
+.ticket__topline,
+.ticket__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 17px 22px;
+  color: #f8e7b0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%) 0 0 / 8px 8px,
+    #312348;
+  font-size: clamp(0.56rem, 1.6vw, 0.7rem);
+  letter-spacing: 0.08em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #090b20;
+}
+
+.ticket__topline {
+  border-bottom: 5px solid #704653;
+  box-shadow: 0 4px 0 #171329;
+}
+
+.ticket__topline span:first-child::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 10px;
+  background: #73c46b;
+  box-shadow:
+    0 0 0 2px #171329,
+    2px 2px 0 2px #050612;
+  content: '';
+}
+
+.ticket__body {
+  min-height: 280px;
+  padding: clamp(42px, 8vw, 72px) 28px;
+  color: #2b1e32;
+  background:
+    linear-gradient(rgba(102, 70, 48, 0.07) 2px, transparent 2px) 0 0 / 100% 8px,
+    linear-gradient(90deg, #c6a866, #ead79c 18%, #e6cf90 82%, #b99459);
+  text-align: center;
+  box-shadow: inset 0 0 0 5px rgba(91, 51, 70, 0.25);
+}
+
+.ticket__position {
+  margin: 0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(1.45rem, 5vw, 3.15rem);
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 1.45;
+  text-shadow: 3px 3px 0 rgba(255, 248, 211, 0.65);
+}
+
+.ticket__estimate {
+  margin: 26px 0 0;
+  color: #5b3346;
+  font-size: clamp(0.72rem, 2vw, 0.92rem);
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+.loading-progress {
+  width: min(100%, 470px);
+  margin: 0 auto;
+  padding: 16px;
+  border: 4px solid #5b3346;
+  background: rgba(49, 35, 72, 0.12);
+  box-shadow:
+    inset 4px 4px 0 rgba(255, 248, 211, 0.32),
+    5px 5px 0 rgba(43, 30, 50, 0.35);
+}
+
+.loading-progress[hidden] {
+  display: none;
+}
+
+.replay-button {
+  display: block;
+  margin: 30px auto 0;
+  padding: 14px 22px;
+  border: 4px solid #5b3346;
+  color: #f8e7b0;
+  background: #432e5e;
+  box-shadow:
+    inset 3px 3px 0 rgba(255, 248, 211, 0.22),
+    4px 4px 0 #704653,
+    8px 8px 0 rgba(43, 30, 50, 0.45);
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.62rem, 1.9vw, 0.8rem);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.replay-button[hidden] {
+  display: none;
+}
+
+.replay-button:hover,
+.replay-button:focus-visible {
+  color: #ffd66b;
+  background: #543a74;
+  outline: 4px solid #ffd66b;
+  outline-offset: 4px;
+}
+
+.replay-button:active {
+  box-shadow:
+    inset 3px 3px 0 rgba(255, 248, 211, 0.22),
+    2px 2px 0 #704653,
+    4px 4px 0 rgba(43, 30, 50, 0.45);
+  transform: translate(3px, 3px);
+}
+
+.loading-progress__label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  color: #43283c;
+  font-size: clamp(0.62rem, 1.7vw, 0.76rem);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.loading-progress__label span:first-child::before {
+  margin-right: 8px;
+  color: #7b3f68;
+  content: '◆';
+}
+
+.loading-progress__bar {
+  display: block;
+  width: 100%;
+  height: 26px;
+  overflow: hidden;
+  border: 4px solid #2b1e32;
+  border-radius: 0;
+  appearance: none;
+  background: #171329;
+  box-shadow:
+    inset 3px 3px 0 #090b20,
+    3px 3px 0 rgba(255, 248, 211, 0.42);
+}
+
+.loading-progress__bar::-webkit-progress-bar {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #171329 0 20px,
+      #241b35 20px 22px
+    );
+}
+
+.loading-progress__bar::-webkit-progress-value {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #8d5cbe 0 18px,
+      #b982e0 18px 20px,
+      #33204c 20px 22px
+    );
+  transition: width 200ms steps(2, end);
+}
+
+.loading-progress__bar::-moz-progress-bar {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #8d5cbe 0 18px,
+      #b982e0 18px 20px,
+      #33204c 20px 22px
+    );
+}
+
+.ticket__footer {
+  border-top: 5px solid #704653;
+  box-shadow: inset 0 4px 0 #171329;
+}
+
+.credit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 26px;
+  color: #b8a9d8;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-shadow: 2px 2px 0 #050612;
+  text-transform: uppercase;
+}
+
+.credit__emoji {
+  display: block;
+  /* Backing store is 12x12; rendering it at 24px forces a 2x nearest-neighbour
+     upscale, which is what gives the glyph its chunky pixel-art edges. */
+  width: 24px;
+  height: 24px;
+  /* Always animating, so the swap-on-iteration cycle keeps ticking even when
+     the bounce itself is suppressed for reduced-motion users. */
+  animation: credit-hold 1400ms linear infinite;
+  image-rendering: pixelated;
+}
+
+@keyframes credit-hold {
+  from,
+  to {
+    transform: none;
+  }
+}
+
+.credit__link {
+  border-bottom: 2px solid #5b4a7d;
+  color: #d8c9f0;
+  text-decoration: none;
+}
+
+.credit__link:hover,
+.credit__link:focus-visible {
+  border-bottom-color: #f8e7b0;
+  color: #f8e7b0;
+}
+
+.credit__link:focus-visible {
+  outline: 2px solid #f8e7b0;
+  outline-offset: 3px;
+}
+
+@media (max-width: 560px) {
+  body::after {
+    border-width: 4px;
+  }
+
+  .game-shell {
+    width: min(100% - 28px, 780px);
+    padding: 82px 0 42px;
+  }
+
+  .music-toggle {
+    top: 24px;
+    right: 50%;
+    transform: translateX(50%);
+  }
+
+  .music-toggle:active {
+    transform: translate(calc(50% + 3px), 3px);
+  }
+
+  .masthead {
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    text-shadow:
+      3px 0 0 #9e4f3d,
+      0 3px 0 #9e4f3d,
+      3px 3px 0 #4d2344,
+      6px 6px 0 #050612;
+  }
+
+  .ticket {
+    border-width: 4px;
+    outline-width: 3px;
+    box-shadow:
+      0 0 0 6px #171329,
+      7px 10px 0 #050612;
+  }
+
+  .ticket__topline,
+  .ticket__footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+    padding: 14px 16px;
+  }
+
+  .ticket__body {
+    min-height: 250px;
+    padding: 44px 18px;
+  }
+
+  .loading-progress {
+    padding: 12px;
+  }
+
+  .credit {
+    margin-top: 20px;
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ticket__position {
+    animation: quest-reveal 360ms steps(4, end) both;
+  }
+
+  .credit__emoji {
+    animation: credit-bounce 1400ms steps(2, end) infinite;
+  }
+
+  @keyframes credit-bounce {
+    0%,
+    62%,
+    100% {
+      transform: translateY(0);
+    }
+
+    14% {
+      transform: translateY(-3px);
+    }
+
+    30% {
+      transform: translateY(-8px);
+    }
+
+    46% {
+      transform: translateY(-3px);
+    }
+  }
+
+  @keyframes quest-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+}
