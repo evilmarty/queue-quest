@@ -134,10 +134,14 @@ export const QUIPS: readonly Quip[] = [
 /** Shown while the quip pool is momentarily unusable. */
 export const FALLBACK_QUIP = 'Waiting, as promised.'
 
-export const QUIP_INTERVAL_MS = 2_600
+export const QUIP_INTERVAL_MS = 5_000
 
-/** Past this point the reel switches to the closing lines. */
-const NEARLY_THERE_AFTER_MS = 7_500
+/**
+ * Past this point the reel switches to the closing lines. A turn lasts ten
+ * seconds and a remark holds for five, so this lines up with the second and
+ * final quip of the wait.
+ */
+const NEARLY_THERE_AFTER_MS = 5_000
 
 export interface QuipReelOptions {
   random?: () => number

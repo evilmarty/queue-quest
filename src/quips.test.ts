@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   FALLBACK_QUIP,
   QUIPS,
+  QUIP_INTERVAL_MS,
   QuipReel,
   resolveQuip,
   type Quip,
@@ -134,6 +135,37 @@ describe('quip reel', () => {
     })
 
     expect(first.take(context(), 0)).not.toBe(second.take(context(), 0))
+  })
+
+  it('changes the remark every five seconds', () => {
+    expect(QUIP_INTERVAL_MS).toBe(5_000)
+
+    const reel = new QuipReel({ random: () => 0 })
+    const first = reel.take(context(), 0)
+
+    expect(reel.take(context(), 4_999)).toBe(first)
+    expect(reel.take(context(), 5_000)).not.toBe(first)
+  })
+
+  it('still reaches the closing lines within a single turn', () => {
+    // A turn runs for ten seconds, so remarks land at 0ms and 5000ms. If the
+    // closing threshold ever drifts past the final remark, those lines would
+    // silently never be seen.
+    const reel = new QuipReel({
+      quips: ['early line'],
+      closingQuips: ['closing line'],
+      random: () => 0,
+    })
+    const TURN_MS = 10_000
+    const shown: string[] = []
+
+    for (let elapsed = 0; elapsed < TURN_MS; elapsed += 200) {
+      shown.push(reel.take(context({ elapsedMs: elapsed }), elapsed))
+    }
+
+    expect(shown).toContain('early line')
+    expect(shown).toContain('closing line')
+    expect(shown.at(-1)).toBe('closing line')
   })
 })
 
