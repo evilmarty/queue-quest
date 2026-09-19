@@ -105,4 +105,3 @@ To supply them, add `VITE_TURN_URLS`, `VITE_TURN_USERNAME`, and
 `VITE_TURN_CREDENTIAL` as repository secrets. Note that anything baked into a
 static build is readable by visitors, so use short-lived credentials rather than
 long-lived ones.
-
