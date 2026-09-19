@@ -1,7 +1,8 @@
 # Queue Quest
 
 A static, peer-to-peer waiting game. Players automatically join one shared queue,
-wait ten seconds at the front, and then finish. Queue state is sent directly
+then spend ten seconds at the front making everybody else wait — with the option
+to extend that turn in five second increments. Queue state is sent directly
 between browsers over WebRTC using [Trystero](https://trystero.dev/).
 
 Public signaling infrastructure is used only to help browsers discover one

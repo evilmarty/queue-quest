@@ -4,21 +4,25 @@ import { FantasySoundtrack } from './music.ts'
 import { startCreditCycle } from './credit.ts'
 import { QuipReel } from './quips.ts'
 import {
-  TURN_DURATION_MS,
+  TURN_EXTENSION_MS,
   activeMembers,
+  canExtendTurn,
   connectedLeader,
   createQueueState,
   estimatedWaitMs,
+  extendTurn,
   mergeSnapshot,
   normalizeRemoteFinish,
   normalizeRemoteMember,
   queuePosition,
   reconcileQueue,
   remainingTurnMs,
+  turnDurationMs,
   type QueueGreeting,
   type QueueMember,
   type QueueSnapshot,
 } from './queue.ts'
+import { WastedTime } from './wasted.ts'
 
 const ROOM_CONFIG = {
   appId: 'queue-quest-v1',
@@ -107,18 +111,25 @@ function localGreeting(): QueueGreeting {
 
 const helloAction = room.makeAction<string>('hello')
 const snapshotAction = room.makeAction<string>('queue-state')
+// Extensions are announced directly by the player making them rather than
+// waiting on a leader snapshot, so the countdown never briefly snaps back.
+const extendAction = room.makeAction<string>('extend-turn')
 const soundtrack = new FantasySoundtrack()
 const quipReel = new QuipReel()
+const wastedTime = new WastedTime(localMember.joinedAt)
 
 interface InterfaceElements {
   ticket: HTMLElement
   status: HTMLElement
   headline: HTMLElement
   detail: HTMLElement
-  loading: HTMLElement
-  progress: HTMLProgressElement
-  progressValue: HTMLElement
   quip: HTMLElement
+  turn: HTMLElement
+  turnBar: HTMLProgressElement
+  turnValue: HTMLElement
+  extend: HTMLButtonElement
+  extendNote: HTMLElement
+  wasted: HTMLElement
   queueCount: HTMLElement
   connection: HTMLElement
   musicButton: HTMLButtonElement
@@ -233,6 +244,35 @@ snapshotAction.onMessage = (message, { peerId }) => {
   }
 }
 
+// A player may only ever stretch their own turn, so the claim is safe to
+// apply from whoever currently holds it, regardless of who leads.
+extendAction.onMessage = (_message, { peerId }) => {
+  connectedPeers.add(peerId)
+
+  if (extendTurn(state, peerId)) {
+    render()
+  }
+}
+
+/**
+ * Adds to the local player's own turn and tells everyone immediately. The
+ * leader's next snapshot carries the same extension, and merging keeps the
+ * longer of the two, so an in-flight snapshot cannot undo this.
+ */
+function extendOwnTurn(): void {
+  if (!extendTurn(state, selfId)) {
+    return
+  }
+
+  send(extendAction, '1')
+
+  if (isLeader()) {
+    broadcastSnapshot()
+  }
+
+  render()
+}
+
 function isLeader(): boolean {
   return connectedLeader(state, connectedPeers) === selfId
 }
@@ -306,6 +346,7 @@ function replayGame(): void {
 
   victoryTriggered = false
   finishAnnounced = false
+  wastedTime.startRun(now)
 
   send(helloAction, JSON.stringify(localGreeting()))
   void soundtrack.restartScore().catch(reportMusicError)
@@ -440,11 +481,17 @@ function isTurn(value: unknown): value is QueueSnapshot['turn'] {
   return (
     value === null ||
     (typeof value === 'object' &&
+      value !== null &&
       'memberId' in value &&
       'startedAt' in value &&
       typeof value.memberId === 'string' &&
       typeof value.startedAt === 'number' &&
-      Number.isFinite(value.startedAt))
+      Number.isFinite(value.startedAt) &&
+      // Older peers predate extensions, so a missing value is accepted and
+      // normalised to zero when the turn is merged.
+      (!('extensionMs' in value) ||
+        (typeof value.extensionMs === 'number' &&
+          Number.isFinite(value.extensionMs))))
   )
 }
 
@@ -462,6 +509,21 @@ function formatDuration(milliseconds: number): string {
     : `${minutes} min ${remainingSeconds} sec`
 }
 
+/** Counts down in whole seconds so the turn meter reads like a timer. */
+function formatSeconds(milliseconds: number): string {
+  return `${Math.max(0, Math.ceil(milliseconds / 1_000))}s`
+}
+
+function extendNote(behind: number): string {
+  if (behind <= 0) {
+    return 'Nobody is waiting on you. Hold the queue open anyway.'
+  }
+
+  return behind === 1
+    ? 'One other player is waiting. Make it count.'
+    : `${behind} other players are waiting. Make it count.`
+}
+
 function render(): void {
   const app = document.querySelector<HTMLElement>('#app')
 
@@ -475,12 +537,17 @@ function render(): void {
   const hasFinished = (state.finished[selfId] ?? 0) >= localMember.joinedAt
   const isMatchmaking = !state.turn && !hasFinished && !matchmakingComplete
   const isPlaying = state.turn?.memberId === selfId && !hasFinished
+  const isWaiting = !isPlaying && !hasFinished
   const estimatedWait = estimatedWaitMs(state, selfId, now)
   const turnRemaining = remainingTurnMs(state, now)
+  const turnTotal = turnDurationMs(state.turn)
+  // The bar drains rather than fills: it is time everyone else is losing,
+  // and an extension visibly pushes it back up.
   const turnProgress = Math.min(
     100,
-    Math.max(0, ((TURN_DURATION_MS - turnRemaining) / TURN_DURATION_MS) * 100),
+    Math.max(0, (turnRemaining / turnTotal) * 100),
   )
+  const behind = Math.max(0, queueLength - (position ?? queueLength))
 
   let statusLabel = 'In the queue'
   let headline = `Your position is ${position ?? '—'}`
@@ -503,6 +570,7 @@ function render(): void {
 
     if (!victoryTriggered) {
       victoryTriggered = true
+      wastedTime.bankRun(now)
       void soundtrack.playVictory().catch(reportMusicError)
     }
   }
@@ -537,20 +605,25 @@ function render(): void {
           <div class="ticket__body">
             <p class="ticket__position" data-headline></p>
             <p class="ticket__estimate" data-detail></p>
-            <div class="loading-progress" data-loading hidden>
-              <div class="loading-progress__label">
-                <span>Loading</span>
-                <span data-progress-value></span>
+            <p class="quip" data-quip aria-live="polite"></p>
+            <div class="turn-meter" data-turn hidden>
+              <div class="turn-meter__label">
+                <span>Making others wait</span>
+                <span data-turn-value></span>
               </div>
               <progress
-                class="loading-progress__bar"
-                data-progress
+                class="turn-meter__bar"
+                data-turn-bar
                 max="100"
-                value="0"
-                aria-label="Loading"
+                value="100"
+                aria-label="Time the rest of the queue is still waiting"
               ></progress>
-              <p class="loading-progress__quip" data-quip aria-live="polite"></p>
+              <button class="extend-button" data-extend type="button">
+                Wait ${TURN_EXTENSION_MS / 1_000} more seconds
+              </button>
+              <p class="turn-meter__note" data-extend-note></p>
             </div>
+            <p class="ticket__wasted" data-wasted hidden></p>
             <button class="replay-button" data-replay type="button" hidden>
               Play again
             </button>
@@ -590,10 +663,13 @@ function render(): void {
       status: requireElement(app, '[data-status]'),
       headline: requireElement(app, '[data-headline]'),
       detail: requireElement(app, '[data-detail]'),
-      loading: requireElement(app, '[data-loading]'),
-      progress: requireElement<HTMLProgressElement>(app, '[data-progress]'),
-      progressValue: requireElement(app, '[data-progress-value]'),
       quip: requireElement(app, '[data-quip]'),
+      turn: requireElement(app, '[data-turn]'),
+      turnBar: requireElement<HTMLProgressElement>(app, '[data-turn-bar]'),
+      turnValue: requireElement(app, '[data-turn-value]'),
+      extend: requireElement<HTMLButtonElement>(app, '[data-extend]'),
+      extendNote: requireElement(app, '[data-extend-note]'),
+      wasted: requireElement(app, '[data-wasted]'),
       queueCount: requireElement(app, '[data-queue-count]'),
       connection: requireElement(app, '[data-connection]'),
       musicButton: requireElement<HTMLButtonElement>(app, '[data-music-toggle]'),
@@ -603,6 +679,13 @@ function render(): void {
 
     interfaceElements.replay.addEventListener('click', () => {
       replayGame()
+    })
+
+    interfaceElements.extend.addEventListener('pointerdown', (event) => {
+      event.stopPropagation()
+    })
+    interfaceElements.extend.addEventListener('click', () => {
+      extendOwnTurn()
     })
 
     startCreditCycle(
@@ -641,24 +724,46 @@ function render(): void {
   interfaceElements.detail.hidden = isPlaying
   updateText(interfaceElements.headline, headline)
   updateText(interfaceElements.detail, detail)
-  interfaceElements.loading.hidden = !isPlaying
+  interfaceElements.turn.hidden = !isPlaying
   interfaceElements.replay.hidden = !hasFinished
-  interfaceElements.progress.value = turnProgress
-  updateText(interfaceElements.progressValue, `${Math.round(turnProgress)}%`)
+  interfaceElements.turnBar.value = turnProgress
+  updateText(interfaceElements.turnValue, formatSeconds(turnRemaining))
 
-  if (isPlaying) {
+  const canExtend = isPlaying && canExtendTurn(state.turn)
+  interfaceElements.extend.disabled = !canExtend
+  updateText(
+    interfaceElements.extendNote,
+    canExtend
+      ? extendNote(behind)
+      : 'You have wrung this queue for all it is worth.',
+  )
+
+  interfaceElements.wasted.hidden = !hasFinished
+
+  if (hasFinished) {
+    updateText(
+      interfaceElements.wasted,
+      `Total time wasted: ${formatDuration(wastedTime.totalMs(now))}`,
+    )
+  }
+
+  // Remarks belong to the waiting, not the turn: they are what you read while
+  // somebody else is busy making you wait.
+  interfaceElements.quip.hidden = !isWaiting
+
+  if (isWaiting) {
     updateQuip(
       quipReel.take(
         {
           queueLength,
-          behind: Math.max(0, queueLength - (position ?? queueLength)),
-          elapsedMs: TURN_DURATION_MS - turnRemaining,
+          behind,
+          elapsedMs: now - localMember.joinedAt,
         },
         now,
       ),
     )
   } else {
-    // Each turn should open on a fresh remark rather than resuming whatever
+    // Each wait should open on a fresh remark rather than resuming whatever
     // was left on screen the last time round.
     quipReel.reset()
   }

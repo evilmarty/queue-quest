@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   FALLBACK_QUIP,
   QUIPS,
+  LONG_WAIT_AFTER_MS,
   QUIP_INTERVAL_MS,
   QuipReel,
   resolveQuip,
@@ -87,16 +88,39 @@ describe('quip reel', () => {
     expect(reel.take(context(), 0)).toBe(FALLBACK_QUIP)
   })
 
-  it('switches to the closing lines near the end of the wait', () => {
+  it('brings in the endurance lines once the wait drags on', () => {
     const reel = new QuipReel({
       intervalMs: 0,
-      quips: ['early line'],
-      closingQuips: ['closing line'],
+      quips: ['ordinary line'],
+      enduranceQuips: ['endurance line'],
       random: () => 0,
     })
 
-    expect(reel.take(context({ elapsedMs: 0 }), 0)).toBe('early line')
-    expect(reel.take(context({ elapsedMs: 9_000 }), 1)).toBe('closing line')
+    expect(reel.take(context({ elapsedMs: 0 }), 0)).toBe('ordinary line')
+    expect(reel.take(context({ elapsedMs: LONG_WAIT_AFTER_MS }), 1)).toBe(
+      'endurance line',
+    )
+  })
+
+  it('keeps the ordinary lines in rotation during a long wait', () => {
+    // A wait has no upper bound now that turns can be extended, so a small
+    // dedicated pool would repeat itself into the ground.
+    const reel = new QuipReel({
+      intervalMs: 0,
+      quips: ['a', 'b', 'c'],
+      enduranceQuips: ['endurance line'],
+      random: () => 0,
+    })
+    const seen = new Set<string>()
+
+    for (let tick = 0; tick < 24; tick += 1) {
+      seen.add(reel.take(context({ elapsedMs: 120_000 }), tick))
+    }
+
+    expect(seen).toContain('endurance line')
+    expect(seen).toContain('a')
+    expect(seen).toContain('b')
+    expect(seen).toContain('c')
   })
 
   it('starts fresh after a reset', () => {
@@ -147,25 +171,21 @@ describe('quip reel', () => {
     expect(reel.take(context(), 5_000)).not.toBe(first)
   })
 
-  it('still reaches the closing lines within a single turn', () => {
-    // A turn runs for ten seconds, so remarks land at 0ms and 5000ms. If the
-    // closing threshold ever drifts past the final remark, those lines would
-    // silently never be seen.
-    const reel = new QuipReel({
-      quips: ['early line'],
-      closingQuips: ['closing line'],
-      random: () => 0,
-    })
-    const TURN_MS = 10_000
+  it('does not strand a player on one line during a long wait', () => {
+    // The wait screen is now open-ended, so the reel has to keep producing
+    // fresh lines indefinitely rather than settling on a final one.
+    const reel = new QuipReel({ random: Math.random })
     const shown: string[] = []
 
-    for (let elapsed = 0; elapsed < TURN_MS; elapsed += 200) {
+    for (let elapsed = 0; elapsed <= 300_000; elapsed += 5_000) {
       shown.push(reel.take(context({ elapsedMs: elapsed }), elapsed))
     }
 
-    expect(shown).toContain('early line')
-    expect(shown).toContain('closing line')
-    expect(shown.at(-1)).toBe('closing line')
+    expect(new Set(shown).size).toBeGreaterThan(20)
+
+    for (let index = 1; index < shown.length; index += 1) {
+      expect(shown[index]).not.toBe(shown[index - 1])
+    }
   })
 })
 

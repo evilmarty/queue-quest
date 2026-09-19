@@ -261,7 +261,7 @@ h1 {
   line-height: 1.6;
 }
 
-.loading-progress {
+.turn-meter {
   width: min(100%, 470px);
   margin: 0 auto;
   padding: 16px;
@@ -272,7 +272,7 @@ h1 {
     5px 5px 0 rgba(43, 30, 50, 0.35);
 }
 
-.loading-progress[hidden] {
+.turn-meter[hidden] {
   display: none;
 }
 
@@ -313,7 +313,7 @@ h1 {
   transform: translate(3px, 3px);
 }
 
-.loading-progress__label {
+.turn-meter__label {
   display: flex;
   justify-content: space-between;
   margin-bottom: 12px;
@@ -323,13 +323,13 @@ h1 {
   text-transform: uppercase;
 }
 
-.loading-progress__label span:first-child::before {
+.turn-meter__label span:first-child::before {
   margin-right: 8px;
   color: #7b3f68;
   content: '◆';
 }
 
-.loading-progress__bar {
+.turn-meter__bar {
   display: block;
   width: 100%;
   height: 26px;
@@ -343,7 +343,7 @@ h1 {
     3px 3px 0 rgba(255, 248, 211, 0.42);
 }
 
-.loading-progress__bar::-webkit-progress-bar {
+.turn-meter__bar::-webkit-progress-bar {
   background:
     repeating-linear-gradient(
       90deg,
@@ -352,7 +352,7 @@ h1 {
     );
 }
 
-.loading-progress__bar::-webkit-progress-value {
+.turn-meter__bar::-webkit-progress-value {
   background:
     repeating-linear-gradient(
       90deg,
@@ -363,7 +363,7 @@ h1 {
   transition: width 200ms steps(2, end);
 }
 
-.loading-progress__bar::-moz-progress-bar {
+.turn-meter__bar::-moz-progress-bar {
   background:
     repeating-linear-gradient(
       90deg,
@@ -378,7 +378,7 @@ h1 {
   box-shadow: inset 0 4px 0 #171329;
 }
 
-.loading-progress__quip {
+.quip {
   /* Reserve the tallest line count the remarks can reach at this width, so a
      shorter quip never shrinks the box and jogs the layout mid-wait. */
   min-height: calc(1.6em * 2);
@@ -391,7 +391,74 @@ h1 {
   text-wrap: balance;
 }
 
-.loading-progress__quip:empty {
+.quip:empty {
+  display: none;
+}
+
+.quip[hidden] {
+  display: none;
+}
+
+.turn-meter__note {
+  min-height: calc(1.6em * 2);
+  margin: 14px 0 0;
+  color: #5b3346;
+  font-size: clamp(0.56rem, 1.5vw, 0.66rem);
+  line-height: 1.6;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.extend-button {
+  display: block;
+  width: 100%;
+  margin: 18px 0 0;
+  padding: 14px 18px;
+  border: 4px solid #5b3346;
+  background: #7b3f68;
+  box-shadow:
+    inset 3px 3px 0 rgba(255, 248, 211, 0.22),
+    4px 4px 0 rgba(43, 30, 50, 0.4);
+  color: #fff8d3;
+  font: inherit;
+  font-size: clamp(0.62rem, 1.7vw, 0.74rem);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.extend-button:hover:not(:disabled) {
+  background: #944d7d;
+}
+
+.extend-button:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: inset 3px 3px 0 rgba(255, 248, 211, 0.22);
+}
+
+.extend-button:disabled {
+  color: #b8a9d8;
+  background: #4a3a54;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.extend-button:focus-visible {
+  outline: 3px solid #f4c869;
+  outline-offset: 3px;
+}
+
+.ticket__wasted {
+  margin: 18px 0 0;
+  color: #5b3346;
+  font-size: clamp(0.62rem, 1.7vw, 0.74rem);
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ticket__wasted[hidden] {
   display: none;
 }
 
@@ -449,7 +516,7 @@ h1 {
     border-width: 4px;
   }
 
-  .loading-progress__quip {
+  .quip {
     /* The narrower column wraps the longest remarks onto a third line. */
     min-height: calc(1.6em * 3);
   }
@@ -502,7 +569,7 @@ h1 {
     padding: 44px 18px;
   }
 
-  .loading-progress {
+  .turn-meter {
     padding: 12px;
   }
 
@@ -522,7 +589,7 @@ h1 {
     animation: credit-bounce 1400ms steps(2, end) infinite;
   }
 
-  .loading-progress__quip--enter {
+  .quip--enter {
     animation: quip-fade 420ms steps(3, end) both;
   }
 

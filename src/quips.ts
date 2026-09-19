@@ -3,7 +3,7 @@ export interface QuipContext {
   queueLength: number
   /** People behind the player, all of whom will wait longer than they will. */
   behind: number
-  /** How long the current loading screen has been on display. */
+  /** How long the player has been waiting in the queue. */
   elapsedMs: number
 }
 
@@ -88,47 +88,49 @@ const SOLIDARITY_QUIPS: readonly Quip[] = [
   'Somebody is waiting on a train replacement service. Your wait is a spa day.',
 ]
 
-/** Lines that poke at the loading bar itself. */
-const MACHINERY_QUIPS: readonly Quip[] = [
-  'Loading the concept of loading.',
-  'Reticulating absolutely nothing.',
-  'Polishing pixels nobody asked to have polished.',
+/** Lines about the queue itself and the person currently holding it up. */
+const QUEUE_QUIPS: readonly Quip[] = [
   'Consulting the queue. The queue has no notes.',
   'Alphabetising the void. It was already in order.',
-  'Persuading the progress bar to keep up appearances.',
-  'This percentage is entirely real, which is more than most can claim.',
-  'The bar advances at a fixed rate. Staring will not help. Stare anyway.',
-  'Buffering, in the traditional sense of the word: doing nothing, loudly.',
-  'Counting to ten. Slowly. With feeling.',
+  'The person at the front may extend their turn. Sleep well.',
+  'Somewhere ahead of you, a stranger is deciding how long you wait.',
+  'The front of the queue has a button. You are the reason it is fun to press.',
+  'Your turn is coming, give or take the whims of everyone ahead.',
+  'Counting to ten. Slowly. With feeling. Possibly more than once.',
   'Waking the person who maintains the queue. They are not pleased.',
-  'Feeding the hamster that powers this progress bar.',
-  'Warming up a machine that does not need warming up.',
-  'Downloading more dots for the loading screen.',
-  'Negotiating with the percentage. It drives a hard bargain.',
-  'Unpacking a box that was empty when we packed it.',
-  'Sharpening the pixels. Blunt pixels ruin the whole effect.',
   'Checking the queue twice. Nothing has changed. Checking again.',
-  'Aligning the stars. Mostly for decoration.',
+  'The queue moves at the speed of other people. Famously reliable.',
   'Rebuilding the queue from memory. It was a short memory.',
+  'Every second here was chosen for you by someone else.',
+  'Unpacking a box that was empty when we packed it.',
+  'Aligning the stars. Mostly for decoration.',
   'Applying a thin coat of anticipation.',
-  'Teaching the loading bar to believe in itself.',
+  'Your position is a number. The number is doing its best.',
+  'No queue jumping. There is nowhere to jump to.',
+  'The estimate is an estimate. It has been wrong before.',
+  'Somebody ahead of you is about to make a choice. It will not be kind.',
 ]
 
-/** Lines for the back half of the wait, when the end is nearly in sight. */
-const NEARLY_THERE_QUIPS: readonly Quip[] = [
-  'Nearly there. Try to contain the excitement.',
-  'The end approaches. Prepare to feel very little.',
-  'Almost done. Begin composing your victory speech.',
-  'The finish line nears, and it looks exactly like this screen.',
-  'Any moment now. Truly. We have no reason to deceive you.',
-  'Hold steady. The reward is the knowledge that it stopped.',
-  'Closing in. Do remember to tell no one about this.',
+/**
+ * Lines for a wait that has gone on well past reasonable, which on a busy
+ * queue of extension-happy players is entirely possible.
+ */
+const ENDURANCE_QUIPS: readonly Quip[] = [
+  'Still here. Genuinely impressive, in a way neither of us can defend.',
+  'This has gone on longer than anyone intended. Nobody is coming to fix it.',
+  'You have now waited long enough to have made a sandwich. Think on that.',
+  'At this point the waiting is less a feature and more a lifestyle.',
+  'Your patience has outlasted the joke. The joke apologises.',
+  'Somebody ahead of you is having the time of their life. At your expense.',
+  'You could have left. You did not. We respect it and pity it equally.',
+  'The queue has not forgotten you. The queue simply does not care.',
+  'Long enough now that leaving would feel like admitting defeat.',
 ]
 
 export const QUIPS: readonly Quip[] = [
   ...FUTILITY_QUIPS,
   ...SOLIDARITY_QUIPS,
-  ...MACHINERY_QUIPS,
+  ...QUEUE_QUIPS,
 ]
 
 /** Shown while the quip pool is momentarily unusable. */
@@ -137,17 +139,18 @@ export const FALLBACK_QUIP = 'Waiting, as promised.'
 export const QUIP_INTERVAL_MS = 5_000
 
 /**
- * Past this point the reel switches to the closing lines. A turn lasts ten
- * seconds and a remark holds for five, so this lines up with the second and
- * final quip of the wait.
+ * How long a wait must run before the remarks start acknowledging how absurd
+ * it has become. The wait has no fixed length any more, since every player
+ * ahead can extend their own turn, so this is measured from when the player
+ * joined rather than against a known total.
  */
-const NEARLY_THERE_AFTER_MS = 5_000
+export const LONG_WAIT_AFTER_MS = 60_000
 
 export interface QuipReelOptions {
   random?: () => number
   intervalMs?: number
   quips?: readonly Quip[]
-  closingQuips?: readonly Quip[]
+  enduranceQuips?: readonly Quip[]
 }
 
 /**
@@ -162,8 +165,9 @@ export class QuipReel {
   private readonly random: () => number
   private readonly intervalMs: number
   private readonly quips: readonly Quip[]
-  private readonly closingQuips: readonly Quip[]
+  private readonly enduranceQuips: readonly Quip[]
   private bag: Quip[] = []
+  private bagIsLong = false
   private current: string | null = null
   private shownAt = 0
 
@@ -171,10 +175,10 @@ export class QuipReel {
     this.random = options.random ?? Math.random
     this.intervalMs = options.intervalMs ?? QUIP_INTERVAL_MS
     this.quips = options.quips ?? QUIPS
-    this.closingQuips = options.closingQuips ?? NEARLY_THERE_QUIPS
+    this.enduranceQuips = options.enduranceQuips ?? ENDURANCE_QUIPS
   }
 
-  /** Clears the current line so the next turn opens on a fresh quip. */
+  /** Clears the current line so the next wait opens on a fresh quip. */
   reset(): void {
     this.current = null
     this.shownAt = 0
@@ -186,29 +190,42 @@ export class QuipReel {
    * the rest of the UI.
    */
   take(context: QuipContext, now: number): string {
-    const closing = context.elapsedMs >= NEARLY_THERE_AFTER_MS
-
     if (this.current !== null && now - this.shownAt < this.intervalMs) {
       return this.current
     }
 
-    const pool = closing ? this.closingQuips : this.quips
-    const next = closing
-      ? this.pickFrom(pool, context)
-      : this.drawFromBag(context)
-
-    this.current = next ?? this.current ?? FALLBACK_QUIP
+    this.current = this.drawFromBag(context) ?? this.current ?? FALLBACK_QUIP
     this.shownAt = now
 
     return this.current
   }
 
+  /**
+   * A long wait folds the endurance lines in rather than switching to them
+   * outright. There is no upper bound on how long a wait can run, so a small
+   * dedicated pool would repeat itself into the ground.
+   */
+  private poolFor(context: QuipContext): readonly Quip[] {
+    return context.elapsedMs >= LONG_WAIT_AFTER_MS
+      ? [...this.quips, ...this.enduranceQuips]
+      : this.quips
+  }
+
   private drawFromBag(context: QuipContext): string | null {
+    const isLong = context.elapsedMs >= LONG_WAIT_AFTER_MS
+
+    // Crossing into a long wait widens the pool, so the bag is rebuilt to
+    // bring the endurance lines into rotation straight away.
+    if (isLong !== this.bagIsLong) {
+      this.bag = []
+      this.bagIsLong = isLong
+    }
+
     // Two passes at most: refill once if the bag is exhausted or everything
     // left in it happens to be inapplicable to the current queue.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       if (this.bag.length === 0) {
-        this.bag = this.shuffled(this.quips)
+        this.bag = this.shuffled(this.poolFor(context))
       }
 
       while (this.bag.length > 0) {
@@ -221,18 +238,6 @@ export class QuipReel {
     }
 
     return null
-  }
-
-  private pickFrom(pool: readonly Quip[], context: QuipContext): string | null {
-    const resolved = pool
-      .map((quip) => resolveQuip(quip, context))
-      .filter((line): line is string => line !== null && line !== this.current)
-
-    if (resolved.length === 0) {
-      return null
-    }
-
-    return resolved[Math.floor(this.random() * resolved.length) % resolved.length]
   }
 
   private shuffled(source: readonly Quip[]): Quip[] {

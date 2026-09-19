@@ -1,6 +1,16 @@
 export const TURN_DURATION_MS = 10_000
 export const MAX_REMOTE_JOIN_AGE_MS = 5 * 60_000
 
+/** How much longer a player may make everyone else wait, per request. */
+export const TURN_EXTENSION_MS = 5_000
+
+/**
+ * A ceiling on how far a single turn can be stretched. Extensions are trusted
+ * from whoever holds the turn, so without a cap one peer could hold the queue
+ * open indefinitely.
+ */
+export const MAX_TURN_EXTENSION_MS = 60_000
+
 export interface QueueMember {
   id: string
   joinedAt: number
@@ -9,6 +19,8 @@ export interface QueueMember {
 export interface QueueTurn {
   memberId: string
   startedAt: number
+  /** Time added on top of TURN_DURATION_MS by the player taking the turn. */
+  extensionMs: number
 }
 
 /**
@@ -85,22 +97,102 @@ export function reconcileQueue(state: QueueState, now: number): boolean {
   }
 
   if (!state.turn && queue.length > 0) {
-    state.turn = { memberId: queue[0].id, startedAt: now }
+    state.turn = { memberId: queue[0].id, startedAt: now, extensionMs: 0 }
     changed = true
   }
 
-  if (state.turn && now - state.turn.startedAt >= TURN_DURATION_MS) {
+  if (state.turn && now - state.turn.startedAt >= turnDurationMs(state.turn)) {
     state.finished[state.turn.memberId] = now
     state.turn = null
     changed = true
     queue = activeMembers(state)
 
     if (queue.length > 0) {
-      state.turn = { memberId: queue[0].id, startedAt: now }
+      state.turn = { memberId: queue[0].id, startedAt: now, extensionMs: 0 }
     }
   }
 
   return changed
+}
+
+/** Total length of a turn, including whatever the player has added to it. */
+export function turnDurationMs(turn: QueueTurn | null): number {
+  if (!turn) {
+    return TURN_DURATION_MS
+  }
+
+  return TURN_DURATION_MS + clampExtension(turn.extensionMs)
+}
+
+/**
+ * Adds to the current turn on behalf of the player taking it. Only the holder
+ * of the turn may extend it, and only up to the cap.
+ */
+export function extendTurn(state: QueueState, memberId: string): boolean {
+  if (!state.turn || state.turn.memberId !== memberId) {
+    return false
+  }
+
+  const current = clampExtension(state.turn.extensionMs)
+  const next = clampExtension(current + TURN_EXTENSION_MS)
+
+  if (next === current) {
+    return false
+  }
+
+  state.turn = { ...state.turn, extensionMs: next }
+
+  return true
+}
+
+/** True while the turn still has room for another extension. */
+export function canExtendTurn(turn: QueueTurn | null): boolean {
+  return turn !== null && clampExtension(turn.extensionMs) < MAX_TURN_EXTENSION_MS
+}
+
+function clampExtension(extensionMs: number | undefined): number {
+  if (typeof extensionMs !== 'number' || !Number.isFinite(extensionMs)) {
+    return 0
+  }
+
+  return Math.min(MAX_TURN_EXTENSION_MS, Math.max(0, extensionMs))
+}
+
+/**
+ * Reconciles two views of the same turn. A peer learns about an extension
+ * directly from the player who made it, which can easily arrive before the
+ * leader's snapshot reflects it, so the longer of the two wins rather than
+ * the snapshot overwriting it and snapping the countdown backwards.
+ */
+export function mergeTurn(
+  current: QueueTurn | null,
+  incoming: QueueTurn | null,
+): QueueTurn | null {
+  if (!incoming) {
+    return null
+  }
+
+  const normalized: QueueTurn = {
+    memberId: incoming.memberId,
+    startedAt: incoming.startedAt,
+    extensionMs: clampExtension(incoming.extensionMs),
+  }
+
+  if (
+    !current ||
+    current.memberId !== incoming.memberId ||
+    current.startedAt !== incoming.startedAt
+  ) {
+    return normalized
+  }
+
+  return {
+    ...normalized,
+    extensionMs: Math.max(
+      normalized.extensionMs,
+      clampExtension(current.extensionMs),
+    ),
+  }
 }
 
 export function mergeSnapshot(
@@ -145,7 +237,7 @@ export function mergeSnapshot(
 
   mergeTimestamps(state.finished, snapshot.finished)
   mergeTimestamps(state.departed, snapshot.departed)
-  state.turn = snapshot.turn
+  state.turn = mergeTurn(state.turn, snapshot.turn)
 
   return before !== JSON.stringify(state)
 }
@@ -200,7 +292,7 @@ export function remainingTurnMs(state: QueueState, now: number): number {
     return TURN_DURATION_MS
   }
 
-  return Math.max(0, TURN_DURATION_MS - (now - state.turn.startedAt))
+  return Math.max(0, turnDurationMs(state.turn) - (now - state.turn.startedAt))
 }
 
 export function estimatedWaitMs(
@@ -218,6 +310,9 @@ export function estimatedWaitMs(
     return 0
   }
 
+  // Players ahead may stretch their own turns, but there is no way to know
+  // that in advance, so the estimate assumes nobody does. It is an estimate
+  // in a game about waiting; being optimistic is part of the joke.
   return remainingTurnMs(state, now) + (position - 2) * TURN_DURATION_MS
 }
 
