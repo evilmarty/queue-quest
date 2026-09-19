@@ -55,6 +55,24 @@ to its authored length so the intro flows into the loop seamlessly. The frame
 counts in `src/music.ts` must stay in sync with the generator if the tempo or
 bar count changes.
 
+The background and the app icons are pixel art generated from source, which
+requires [Pillow](https://python-pillow.org) (`pip install Pillow`):
+
+```sh
+python3 scripts/generate_background.py
+python3 scripts/generate_icons.py
+```
+
+`generate_icons.py` writes the icons and favicon into `public/`, alongside
+`public/manifest.json`, which makes the game installable to a home screen.
+Every exported size is a whole multiple of the 32px authoring grid so the art
+is never sampled at a fractional offset. The manifest also ships a maskable
+icon, which insets the castle far enough to survive being cropped to a circle.
+
+Paths inside `manifest.json` are relative to the manifest itself, so they
+resolve correctly from both the local root and the `/queue-quest/` base used on
+Pages. The tags in `index.html` use Vite's `%BASE_URL%` for the same reason.
+
 ## Checks
 
 ```sh
