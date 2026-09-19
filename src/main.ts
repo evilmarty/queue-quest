@@ -2,6 +2,7 @@ import { joinRoom, selfId, type MessageAction } from 'trystero'
 import './styles.css'
 import { FantasySoundtrack } from './music.ts'
 import { startCreditCycle } from './credit.ts'
+import { QuipReel } from './quips.ts'
 import {
   TURN_DURATION_MS,
   activeMembers,
@@ -107,6 +108,7 @@ function localGreeting(): QueueGreeting {
 const helloAction = room.makeAction<string>('hello')
 const snapshotAction = room.makeAction<string>('queue-state')
 const soundtrack = new FantasySoundtrack()
+const quipReel = new QuipReel()
 
 interface InterfaceElements {
   ticket: HTMLElement
@@ -116,6 +118,7 @@ interface InterfaceElements {
   loading: HTMLElement
   progress: HTMLProgressElement
   progressValue: HTMLElement
+  quip: HTMLElement
   queueCount: HTMLElement
   connection: HTMLElement
   musicButton: HTMLButtonElement
@@ -546,6 +549,7 @@ function render(): void {
                 value="0"
                 aria-label="Loading"
               ></progress>
+              <p class="loading-progress__quip" data-quip aria-live="polite"></p>
             </div>
             <button class="replay-button" data-replay type="button" hidden>
               Play again
@@ -589,6 +593,7 @@ function render(): void {
       loading: requireElement(app, '[data-loading]'),
       progress: requireElement<HTMLProgressElement>(app, '[data-progress]'),
       progressValue: requireElement(app, '[data-progress-value]'),
+      quip: requireElement(app, '[data-quip]'),
       queueCount: requireElement(app, '[data-queue-count]'),
       connection: requireElement(app, '[data-connection]'),
       musicButton: requireElement<HTMLButtonElement>(app, '[data-music-toggle]'),
@@ -640,6 +645,23 @@ function render(): void {
   interfaceElements.replay.hidden = !hasFinished
   interfaceElements.progress.value = turnProgress
   updateText(interfaceElements.progressValue, `${Math.round(turnProgress)}%`)
+
+  if (isPlaying) {
+    updateQuip(
+      quipReel.take(
+        {
+          queueLength,
+          behind: Math.max(0, queueLength - (position ?? queueLength)),
+          elapsedMs: TURN_DURATION_MS - turnRemaining,
+        },
+        now,
+      ),
+    )
+  } else {
+    // Each turn should open on a fresh remark rather than resuming whatever
+    // was left on screen the last time round.
+    quipReel.reset()
+  }
   updateText(
     interfaceElements.queueCount,
     `${queueLength} ${queueLength === 1 ? 'person' : 'people'} queued`,
@@ -710,6 +732,22 @@ function updateText(element: HTMLElement, text: string): void {
   if (element.textContent !== text) {
     element.textContent = text
   }
+}
+
+function updateQuip(text: string): void {
+  const element = interfaceElements?.quip
+
+  if (!element || element.textContent === text) {
+    return
+  }
+
+  element.textContent = text
+
+  // Restart the fade rather than letting a half-finished one carry over.
+  // Reading offsetWidth forces the style flush that makes the replay stick.
+  element.classList.remove('loading-progress__quip--enter')
+  void element.offsetWidth
+  element.classList.add('loading-progress__quip--enter')
 }
 
 render()
