@@ -338,9 +338,15 @@ h1 {
   border-radius: 0;
   appearance: none;
   background: #171329;
+  /*
+   * A progress element always anchors its fill to the left edge, so the bar is
+   * mirrored to make the time drain away left to right. The shadow offsets are
+   * negated to survive the flip and still land bottom-right.
+   */
+  transform: scaleX(-1);
   box-shadow:
-    inset 3px 3px 0 #090b20,
-    3px 3px 0 rgba(255, 248, 211, 0.42);
+    inset -3px 3px 0 #090b20,
+    -3px 3px 0 rgba(255, 248, 211, 0.42);
 }
 
 .turn-meter__bar::-webkit-progress-bar {

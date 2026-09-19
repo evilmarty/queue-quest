@@ -1,5 +1,8 @@
 # Queue Quest
 
+Play it at **<https://marty.zalega.me/queue-quest/>**. Open it in two browsers to
+see the queue form — with only one player you go straight to the front.
+
 A static, peer-to-peer waiting game. Players automatically join one shared queue,
 then spend ten seconds at the front making everybody else wait — with the option
 to extend that turn in five second increments. Queue state is sent directly
@@ -62,7 +65,8 @@ npm run build
 ## Deployment
 
 Every push to `main` builds the site and publishes it to GitHub Pages via
-`.github/workflows/deploy.yml`.
+`.github/workflows/deploy.yml`, which serves it at
+<https://marty.zalega.me/queue-quest/>.
 
 Because project sites are served from `/<repo>/`, the workflow sets
 `GITHUB_PAGES_BASE` so Vite emits the correct asset paths. Local builds keep the
