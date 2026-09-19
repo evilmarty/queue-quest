@@ -264,3 +264,4 @@ export function resolveQuip(quip: Quip, context: QuipContext): string | null {
     return null
   }
 }
+// trivial change for PR check
